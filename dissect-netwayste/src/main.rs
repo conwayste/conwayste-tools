@@ -1,8 +1,17 @@
+use bincode::deserialize;
+use clap::{self, Parser};
 use etherparse::{SlicedPacket, TransportSlice::Udp};
-use netwaystev2::DEFAULT_PORT;
+use netwaystev2::{protocol::Packet, DEFAULT_PORT};
 use pcap;
 use tracing::*;
 use tracing_subscriber::FmtSubscriber;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, help = "Log all failed de-serialization attempts")]
+    verbose: bool,
+}
 
 fn main() {
     let subscriber = FmtSubscriber::builder()
@@ -11,6 +20,9 @@ fn main() {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    let args = Args::parse();
+
     // Verify we can find a device
     let _ = pcap::Device::list().expect("device lookup failed");
 
@@ -32,18 +44,35 @@ fn main() {
         .expect("failed to filter for netwayste packets");
 
     while let Ok(packet) = cap.next_packet() {
-        debug!("{:?}", packet);
         match SlicedPacket::from_ethernet(packet.data) {
             Err(err) => {
                 panic!("deserializing EthernetII packet: {}", err);
             }
             Ok(ethernet) => {
                 match ethernet.transport {
-                    Some(Udp(udp)) => info!("src={} dst={} data={:?}", udp.source_port(), udp.destination_port(), ethernet.payload),
-                    _ => (),
+                    Some(Udp(udp)) => {
+                        // Filter away non-netwayste packets based on the source and destination port
+                        if udp.source_port() != DEFAULT_PORT
+                            && udp.destination_port() != DEFAULT_PORT
+                        {
+                            continue;
+                        }
+                    }
+                    _ => continue,
                 }
 
-                // TODO: Deserialize 'ethernet.payload' into a Netwayste Packet
+                // There's a packet that is candidate for matching netwayste
+                match deserialize::<Packet>(ethernet.payload) {
+                    Ok(nw_packet) => {
+                        info!("{:?}", nw_packet);
+                    }
+                    Err(e) => {
+                        if args.verbose {
+                            error!("Failed de-serialization: '{}'", e);
+                            error!("Failed packet contents: '{:?}'", ethernet.payload);
+                        }
+                    }
+                }
             }
         }
     }
