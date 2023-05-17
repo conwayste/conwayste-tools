@@ -1,5 +1,5 @@
 [package]
-name = "dissect-netwaystev2"
+name = "dissect-netwayste"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,11 @@ edition = "2021"
 
 [dependencies]
 etherparse = "0.13"
-netwaystev2 = {path = "../netwaystev2"}
 pcap = { version = "1", features = ["capture-stream"] }
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[dependencies.netwaystev2]
+git = "https://github.com/conwayste/conwayste/"
+branch = "mang/netwayste_v2"
