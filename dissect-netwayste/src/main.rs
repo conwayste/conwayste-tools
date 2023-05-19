@@ -1,5 +1,9 @@
+use std::{collections::HashMap, net::Ipv4Addr, vec};
+
 use bincode::deserialize;
+use circular_vec::CircularVec;
 use clap::{self, Parser};
+use colored::*;
 use etherparse::{InternetSlice::Ipv4, SlicedPacket, TransportSlice::Udp};
 use netwaystev2::{protocol::Packet, DEFAULT_PORT as NETWAYSTE_PORT};
 use pcap;
@@ -81,6 +85,21 @@ fn main() {
         device_name, filter_string
     );
 
+    let mut ip_color_map = HashMap::<Ipv4Addr, Color>::new();
+
+    // Colors are specified to reduce adjacent similarity.
+    // This may appear differently depending on one's terminal settings.
+    let mut color_list: CircularVec<Color> = vec![
+        Color::Cyan,
+        Color::Yellow,
+        Color::Red,
+        Color::Magenta,
+        Color::Green,
+        Color::Blue,
+    ]
+    .into_iter()
+    .collect();
+
     while let Ok(packet) = cap.next_packet() {
         match SlicedPacket::from_ethernet(packet.data) {
             Err(err) => {
@@ -106,9 +125,18 @@ fn main() {
                     _ => continue,
                 }
 
+                let message_color: Color;
                 match ethernet.ip {
                     Some(Ipv4(ipv4, _extensions)) => {
                         src_ip = ipv4.source_addr();
+
+                        match ip_color_map.get_mut(&src_ip) {
+                            Some(entry) => message_color = *entry,
+                            None => {
+                                message_color = *color_list.next();
+                                ip_color_map.insert(src_ip.clone(), message_color);
+                            }
+                        }
                     }
                     _ => continue,
                 }
@@ -116,7 +144,8 @@ fn main() {
                 // There's a packet that is candidate for matching netwayste
                 match deserialize::<Packet>(ethernet.payload) {
                     Ok(nw_packet) => {
-                        info!("{:>15?}:{:<5} {:?}", src_ip, src_port, nw_packet);
+                        let message = format!("{:>15?}:{:<5} {:?}", src_ip, src_port, nw_packet);
+                        info!("{}", message.color(message_color));
                     }
                     Err(e) => {
                         if args.verbose {
