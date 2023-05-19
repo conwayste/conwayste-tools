@@ -12,11 +12,18 @@ struct Args {
     #[arg(short, long, help = "Log all failed de-serialization attempts")]
     verbose: bool,
 
-    #[arg(short, long)]
+    #[arg(short, long, help = "The network interface name")]
     interface: Option<String>,
 
-    #[arg(short, long, default_value_t = NETWAYSTE_PORT)]
+    #[arg(short, long, default_value_t = NETWAYSTE_PORT, help = "This has no effect if 'custom-bpf' is provided")]
     port: u16,
+
+    #[arg(
+        short,
+        long,
+        help = "Specify a custom, valid Berkeley Packet Filter (BPF) string. Default is 'udp port <port>'"
+    )]
+    custom_bpf: Option<String>,
 }
 
 fn main() {
@@ -56,12 +63,22 @@ fn main() {
         .open()
         .unwrap();
 
-    cap.filter(format!("udp port {:?}", args.port).as_str(), true)
+    let mut filter_string = format!("udp port {:?}", args.port);
+    if let Some(filter) = args.custom_bpf {
+        let dead_capture = pcap::Capture::dead(pcap::Linktype::ETHERNET).unwrap();
+        dead_capture
+            .compile(&filter, true)
+            .ok()
+            .expect("Failed to compile custom-bpf");
+        filter_string = filter;
+    }
+
+    cap.filter(&filter_string, true)
         .expect("Failed to filter for netwayste packets");
 
     info!(
-        "Listening to device '{}' on port '{}'",
-        device_name, args.port
+        "Listening to device '{}' with filter '{}'",
+        device_name, filter_string
     );
 
     while let Ok(packet) = cap.next_packet() {
