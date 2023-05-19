@@ -12,6 +12,9 @@ struct Args {
     #[arg(short, long, help = "Log all failed de-serialization attempts")]
     verbose: bool,
 
+    #[arg(short, long)]
+    interface: Option<String>,
+
     #[arg(short, long, default_value_t = NETWAYSTE_PORT)]
     port: u16,
 }
@@ -26,17 +29,27 @@ fn main() {
 
     let args = Args::parse();
 
-    // Verify we can find a device
-    let _ = pcap::Device::list().expect("device lookup failed");
-
-    // Get the default Device
-    let device = pcap::Device::lookup()
-        .expect("device lookup failed")
-        .expect("no device available");
-
-    info!("Using device '{}'", device.name);
-
     // Setup Capture
+    let device = if let Some(interface) = args.interface {
+        // Verify we can find a device
+        let device_list = pcap::Device::list().expect("Could not access network interface list");
+        device_list
+            .into_iter()
+            .filter(|d| d.name == interface)
+            .next()
+            .expect(&format!(
+                "Failed to find '{}' in network interface list",
+                interface
+            ))
+    } else {
+        pcap::Device::lookup()
+            .expect("Failed to look up default device")
+            .unwrap()
+    };
+
+    let device_name = device.name.clone();
+
+    // Unwrap okay because of device verification above
     let mut cap = pcap::Capture::from_device(device)
         .unwrap()
         .immediate_mode(true)
