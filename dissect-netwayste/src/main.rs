@@ -11,6 +11,9 @@ use tracing_subscriber::FmtSubscriber;
 struct Args {
     #[arg(short, long, help = "Log all failed de-serialization attempts")]
     verbose: bool,
+
+    #[arg(short, long, default_value_t = NETWAYSTE_PORT)]
+    port: u16,
 }
 
 fn main() {
@@ -40,8 +43,13 @@ fn main() {
         .open()
         .unwrap();
 
-    cap.filter(format!("udp port {:?}", NETWAYSTE_PORT).as_str(), true)
-        .expect("failed to filter for netwayste packets");
+    cap.filter(format!("udp port {:?}", args.port).as_str(), true)
+        .expect("Failed to filter for netwayste packets");
+
+    info!(
+        "Listening to device '{}' on port '{}'",
+        device_name, args.port
+    );
 
     while let Ok(packet) = cap.next_packet() {
         match SlicedPacket::from_ethernet(packet.data) {
