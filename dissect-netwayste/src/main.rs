@@ -100,6 +100,7 @@ fn main() {
     .into_iter()
     .collect();
 
+    // TODO: some next_packet() errors should just be logged, rather than breaking out of the loop.
     while let Ok(packet) = cap.next_packet() {
         match SlicedPacket::from_ethernet(packet.data) {
             Err(err) => {
@@ -114,12 +115,6 @@ fn main() {
                 match ethernet.transport {
                     // Filter away non-netwayste packets based on the source and destination port
                     Some(Udp(udp)) => {
-                        if udp.source_port() != NETWAYSTE_PORT
-                            && udp.destination_port() != NETWAYSTE_PORT
-                        {
-                            continue;
-                        }
-
                         src_port = udp.source_port();
                     }
                     _ => continue,
