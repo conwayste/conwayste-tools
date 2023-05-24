@@ -23,6 +23,13 @@ struct Args {
     port: u16,
 
     #[arg(
+        long,
+        default_value_t = false,
+        help = "Only use host (not port) for choosing the color"
+    )]
+    ignore_port_for_colorizing: bool,
+
+    #[arg(
         short,
         long,
         help = "Specify a custom, valid Berkeley Packet Filter (BPF) string. Default is 'udp port <port>'"
@@ -85,7 +92,7 @@ fn main() {
         device_name, filter_string
     );
 
-    let mut ip_color_map = HashMap::<Ipv4Addr, Color>::new();
+    let mut ip_color_map = HashMap::<(Ipv4Addr, Option<u16>), Color>::new();
 
     // Colors are specified to reduce adjacent similarity.
     // This may appear differently depending on one's terminal settings.
@@ -112,24 +119,28 @@ fn main() {
                 let src_port;
                 let src_ip;
 
+                // Ignore non-UDP.
                 match ethernet.transport {
-                    // Filter away non-netwayste packets based on the source and destination port
                     Some(Udp(udp)) => {
                         src_port = udp.source_port();
                     }
                     _ => continue,
                 }
-
                 let message_color: Color;
                 match ethernet.ip {
                     Some(Ipv4(ipv4, _extensions)) => {
                         src_ip = ipv4.source_addr();
+                        let key = if args.ignore_port_for_colorizing {
+                            (src_ip, None)
+                        } else {
+                            (src_ip, Some(src_port))
+                        };
 
-                        match ip_color_map.get_mut(&src_ip) {
+                        match ip_color_map.get_mut(&key) {
                             Some(entry) => message_color = *entry,
                             None => {
                                 message_color = *color_list.next();
-                                ip_color_map.insert(src_ip.clone(), message_color);
+                                ip_color_map.insert(key.clone(), message_color);
                             }
                         }
                     }
