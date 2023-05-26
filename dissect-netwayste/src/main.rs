@@ -25,7 +25,7 @@ struct Args {
 
     #[arg(
         long,
-        default_value = "ip-and-host",
+        default_value = "ip-and-port",
         help = "Control how packets are colorized"
     )]
     color_option: ColorOption,
@@ -40,7 +40,7 @@ struct Args {
 
 #[derive(Parser, ValueEnum, Debug, Clone)]
 enum ColorOption {
-    IPAndHost,
+    IPAndPort,
     OnlyIP,
     NoColor,
 }
@@ -154,7 +154,7 @@ fn main() {
                     Some(Ipv4(ipv4, _extensions)) => {
                         src_ip = ipv4.source_addr();
                         let key = match args.color_option {
-                            ColorOption::IPAndHost => (src_ip, Some(src_port)),
+                            ColorOption::IPAndPort => (src_ip, Some(src_port)),
                             _ => (src_ip, None),
                         };
 
