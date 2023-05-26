@@ -1,8 +1,9 @@
+use std::fmt;
 use std::{collections::HashMap, net::Ipv4Addr, vec};
 
 use bincode::deserialize;
 use circular_vec::CircularVec;
-use clap::{self, Parser};
+use clap::{self, Parser, ValueEnum};
 use colored::*;
 use etherparse::{InternetSlice::Ipv4, SlicedPacket, TransportSlice::Udp};
 use netwaystev2::{protocol::Packet, DEFAULT_PORT as NETWAYSTE_PORT};
@@ -23,11 +24,40 @@ struct Args {
     port: u16,
 
     #[arg(
+        long,
+        default_value = "ip-and-port",
+        help = "Control how packets are colorized"
+    )]
+    color_option: ColorOption,
+
+    #[arg(
         short,
         long,
         help = "Specify a custom, valid Berkeley Packet Filter (BPF) string. Default is 'udp port <port>'"
     )]
     custom_bpf: Option<String>,
+}
+
+#[derive(Parser, ValueEnum, Debug, Clone)]
+enum ColorOption {
+    IPAndPort,
+    OnlyIP,
+    NoColor,
+}
+
+impl ColorOption {
+    fn color_enabled(&self) -> bool {
+        match self {
+            ColorOption::NoColor => false,
+            _ => true,
+        }
+    }
+}
+
+impl fmt::Display for ColorOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 fn main() {
@@ -85,7 +115,7 @@ fn main() {
         device_name, filter_string
     );
 
-    let mut ip_color_map = HashMap::<Ipv4Addr, Color>::new();
+    let mut ip_color_map = HashMap::<(Ipv4Addr, Option<u16>), Color>::new();
 
     // Colors are specified to reduce adjacent similarity.
     // This may appear differently depending on one's terminal settings.
@@ -112,24 +142,29 @@ fn main() {
                 let src_port;
                 let src_ip;
 
+                // Ignore non-UDP.
                 match ethernet.transport {
-                    // Filter away non-netwayste packets based on the source and destination port
                     Some(Udp(udp)) => {
                         src_port = udp.source_port();
                     }
                     _ => continue,
                 }
-
-                let message_color: Color;
+                let mut message_color: Option<Color> = None;
                 match ethernet.ip {
                     Some(Ipv4(ipv4, _extensions)) => {
                         src_ip = ipv4.source_addr();
+                        let key = match args.color_option {
+                            ColorOption::IPAndPort => (src_ip, Some(src_port)),
+                            _ => (src_ip, None),
+                        };
 
-                        match ip_color_map.get_mut(&src_ip) {
-                            Some(entry) => message_color = *entry,
-                            None => {
-                                message_color = *color_list.next();
-                                ip_color_map.insert(src_ip.clone(), message_color);
+                        if args.color_option.color_enabled() {
+                            match ip_color_map.get_mut(&key) {
+                                Some(entry) => message_color = Some(*entry),
+                                None => {
+                                    message_color = Some(*color_list.next());
+                                    ip_color_map.insert(key.clone(), message_color.unwrap());
+                                }
                             }
                         }
                     }
@@ -140,7 +175,11 @@ fn main() {
                 match deserialize::<Packet>(ethernet.payload) {
                     Ok(nw_packet) => {
                         let message = format!("{:>15?}:{:<5} {:?}", src_ip, src_port, nw_packet);
-                        info!("{}", message.color(message_color));
+                        if args.color_option.color_enabled() {
+                            info!("{}", message.color(message_color.unwrap()));
+                        } else {
+                            info!("{}", message);
+                        }
                     }
                     Err(e) => {
                         if args.verbose {
