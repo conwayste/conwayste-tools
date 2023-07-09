@@ -8,7 +8,7 @@
 
 use std::process::{Command, ExitCode};
 
-use anyhow::{self as A, bail};
+use anyhow::{self, bail};
 use serde_json::Value;
 
 fn main() -> ExitCode {
@@ -44,7 +44,7 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn verify_notebook_file(path: &str) -> A::Result<()> {
+fn verify_notebook_file(path: &str) -> anyhow::Result<()> {
     let out = Command::new("git")
         .args(["show", &format!(":{}", path)])
         .output()
